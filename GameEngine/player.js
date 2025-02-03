@@ -122,7 +122,8 @@ class Player {
         // Handle collisions and position updates
         this.handleCollisions(TICK);
     }
-
+    
+    // Updates the player's state based on current conditions
     updateState() {
         if (!this.isGrounded) {
             this.state = 4; // Jumping/Falling
@@ -150,6 +151,7 @@ class Player {
         this.state = 0;
     }
 
+    // Updates horizontal movement based on input
     updateHorizontalMovement(TICK, MIN_WALK, MAX_WALK, MAX_RUN, ACC_WALK, ACC_RUN, DEC_REL, DEC_SKID) {
         // Handle left movement
         if (this.game.keys['a'] && !this.game.keys['d']) {
@@ -179,6 +181,7 @@ class Player {
         }
     }
 
+    // Applies maximum velocity limits to both horizontal and vertical movement
     applyMaxVelocities(MAX_WALK, MAX_RUN, MAX_FALL) {
         if (this.game.keys['shift']) {
             this.velocity.x = Math.min(Math.max(this.velocity.x, -MAX_RUN), MAX_RUN);
@@ -188,6 +191,7 @@ class Player {
         this.velocity.y = Math.min(this.velocity.y, MAX_FALL);
     }
 
+    //Collision - Tike time elapsed since last update
     handleCollisions(TICK) {
         // Calculate next position
         let nextX = this.x + this.velocity.x * TICK;
@@ -212,6 +216,7 @@ class Player {
         this.BB = new BoundingBox(this.x, this.y, this.width, this.height);
     }
 
+    // Handles horizontal collision detection and response : boundingbox for horizontal movement
     handleHorizontalCollision(horizontalBB, nextX) {
         const collision = this.map.checkCollisions({
             BB: horizontalBB,
@@ -233,6 +238,7 @@ class Player {
         }
     }
 
+    // Handles vertical collision detection and response
     handleVerticalCollision(verticalBB, nextY, mapHeight) {
         const collision = this.map.checkCollisions({
             BB: verticalBB,
@@ -257,6 +263,7 @@ class Player {
         }
     }
 
+    // Renders the player character
     draw(ctx) {
         if (!ctx) return;
 
