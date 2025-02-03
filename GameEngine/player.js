@@ -7,13 +7,13 @@ class Player {
 
         this.game.Player = this;
 
-        // Load individual spritesheets for each action
+        // Load spritesheets
         this.idleSpritesheet = ASSET_MANAGER.getAsset("./sprites/idle.png");
         this.runSpritesheet = ASSET_MANAGER.getAsset("./sprites/run.png");
         this.jumpSpritesheet = ASSET_MANAGER.getAsset("./sprites/jump.png");
 
         this.facing = 1; // 0 = left, 1 = right
-        this.state = 0; // 0 = idle, 1 = walking, 2 = running, 3 = skidding, 4 = jumping/falling, 5 = crouching/sliding
+        this.state = 0; // 0 = idle, 1 = walking, 2 = running, 3 = skidding, 4 = jumping/falling
         this.dead = false;
         this.isGrounded = true;
         this.fallAcc = 550;
@@ -31,7 +31,7 @@ class Player {
     }
 
     loadAnimations() {
-        // Create a 3D array to store animations by [state][size][direction]
+        // Initialize animation array
         for (let i = 0; i < 7; i++) {
             this.animations.push([]);
             for (let j = 0; j < 3; j++) {
@@ -62,8 +62,18 @@ class Player {
             0, 0, 181, 175, 5, 0.1
         );
 
-        // Jump animation - copy for all states that need it
-        for (let i = 2; i <= 4; i++) {
+        // Running animation (faster)
+        this.animations[2][0][1] = new Animator(
+            this.runSpritesheet,
+            0, 0, 181, 175, 5, 0.08  // Faster animation for running
+        );
+        this.animations[2][0][0] = new Animator(
+            this.runSpritesheet,
+            0, 0, 181, 175, 5, 0.08
+        );
+
+        // Jump animation
+        for (let i = 3; i <= 4; i++) {
             this.animations[i][0][1] = new Animator(
                 this.jumpSpritesheet,
                 0, 0, 181, 175, 2, 0.2
@@ -90,70 +100,95 @@ class Player {
         const GRAVITY = 1500;
         const MAX_JUMP = 750;
 
+        // Update state based on movement and keys
+        this.updateState();
+
         // Jump input handling
         if ((this.game.keys['space'] || this.game.keys['w']) && this.isGrounded) {
             this.velocity.y = -MAX_JUMP;
-            this.state = 4; // Set to jumping state
+            this.state = 4;
             this.isGrounded = false;
         }
 
-        // HORIZONTAL MOVEMENT
-        if (Math.abs(this.velocity.x) < MIN_WALK) {
-            this.velocity.x = 0;
-            if (!this.state === 4) this.state = 0;
-            if (this.game.keys['a'] && !this.game.keys['s']) {
-                this.velocity.x -= MIN_WALK;
-            }
-            if (this.game.keys['d'] && !this.game.keys['s']) {
-                this.velocity.x += MIN_WALK;
-            }
-        } else {
-            if (this.facing === 0) {
-                if (this.game.keys['a'] && !this.game.keys['d'] && !this.game.keys['s']) {
-                    if (this.game.keys['shift']) {
-                        this.velocity.x -= ACC_RUN * TICK;
-                        if (!this.state === 4) this.state = 2;
-                    } else {
-                        this.velocity.x -= ACC_WALK * TICK;
-                        if (!this.state === 4) this.state = 1;
-                    }
-                } else if (this.game.keys['d'] && !this.game.keys['a'] && !this.game.keys['s']) {
-                    this.velocity.x += DEC_SKID * TICK;
-                    if (!this.state === 4) this.state = 3;
-                } else {
-                    this.velocity.x += DEC_REL * TICK;
-                    if (!this.state === 4) this.state = 1;
-                }
-            }
-            if (this.facing === 1) {
-                if (this.game.keys['d'] && !this.game.keys['a'] && !this.game.keys['s']) {
-                    if (this.game.keys['shift']) {
-                        this.velocity.x += ACC_RUN * TICK;
-                        if (!this.state === 4) this.state = 2;
-                    } else {
-                        this.velocity.x += ACC_WALK * TICK;
-                        if (!this.state === 4) this.state = 1;
-                    }
-                } else if (this.game.keys['a'] && !this.game.keys['d'] && !this.game.keys['s']) {
-                    this.velocity.x -= DEC_SKID * TICK;
-                    if (!this.state === 4) this.state = 3;
-                } else {
-                    this.velocity.x -= DEC_REL * TICK;
-                    if (!this.state === 4) this.state = 1;
-                }
-            }
-        }
+        // Horizontal movement
+        this.updateHorizontalMovement(TICK, MIN_WALK, MAX_WALK, MAX_RUN, ACC_WALK, ACC_RUN, DEC_REL, DEC_SKID);
 
         // Apply gravity
         this.velocity.y += GRAVITY * TICK;
 
-        // Max velocity calculations
-        if (this.velocity.x >= MAX_RUN) this.velocity.x = MAX_RUN;
-        if (this.velocity.x <= -MAX_RUN) this.velocity.x = -MAX_RUN;
-        if (this.velocity.x >= MAX_WALK && !this.game.keys['shift']) this.velocity.x = MAX_WALK;
-        if (this.velocity.x <= -MAX_WALK && !this.game.keys['shift']) this.velocity.x = -MAX_WALK;
-        if (this.velocity.y >= MAX_FALL) this.velocity.y = MAX_FALL;
+        // Apply max velocities
+        this.applyMaxVelocities(MAX_WALK, MAX_RUN, MAX_FALL);
 
+        // Handle collisions and position updates
+        this.handleCollisions(TICK);
+    }
+
+    updateState() {
+        if (!this.isGrounded) {
+            this.state = 4; // Jumping/Falling
+            return;
+        }
+
+        if (Math.abs(this.velocity.x) < 20) {
+            this.state = 0; // Idle
+            return;
+        }
+
+        // Running state (holding shift)
+        if (this.game.keys['shift'] && (this.game.keys['d'] || this.game.keys['a'])) {
+            this.state = 2;
+            return;
+        }
+
+        // Walking state
+        if (this.game.keys['d'] || this.game.keys['a']) {
+            this.state = 1;
+            return;
+        }
+
+        // Default to idle if no other conditions met
+        this.state = 0;
+    }
+
+    updateHorizontalMovement(TICK, MIN_WALK, MAX_WALK, MAX_RUN, ACC_WALK, ACC_RUN, DEC_REL, DEC_SKID) {
+        // Handle left movement
+        if (this.game.keys['a'] && !this.game.keys['d']) {
+            this.facing = 0;
+            if (this.game.keys['shift']) {
+                this.velocity.x -= ACC_RUN * TICK;
+            } else {
+                this.velocity.x -= ACC_WALK * TICK;
+            }
+        }
+        // Handle right movement
+        else if (this.game.keys['d'] && !this.game.keys['a']) {
+            this.facing = 1;
+            if (this.game.keys['shift']) {
+                this.velocity.x += ACC_RUN * TICK;
+            } else {
+                this.velocity.x += ACC_WALK * TICK;
+            }
+        }
+        // Handle deceleration
+        else {
+            if (this.velocity.x > 0) {
+                this.velocity.x = Math.max(0, this.velocity.x - DEC_REL * TICK);
+            } else if (this.velocity.x < 0) {
+                this.velocity.x = Math.min(0, this.velocity.x + DEC_REL * TICK);
+            }
+        }
+    }
+
+    applyMaxVelocities(MAX_WALK, MAX_RUN, MAX_FALL) {
+        if (this.game.keys['shift']) {
+            this.velocity.x = Math.min(Math.max(this.velocity.x, -MAX_RUN), MAX_RUN);
+        } else {
+            this.velocity.x = Math.min(Math.max(this.velocity.x, -MAX_WALK), MAX_WALK);
+        }
+        this.velocity.y = Math.min(this.velocity.y, MAX_FALL);
+    }
+
+    handleCollisions(TICK) {
         // Calculate next position
         let nextX = this.x + this.velocity.x * TICK;
         let nextY = this.y + this.velocity.y * TICK;
@@ -166,12 +201,19 @@ class Player {
         nextX = Math.max(0, Math.min(nextX, mapWidth - this.width));
         nextY = Math.max(0, Math.min(nextY, mapHeight - this.height));
 
-        // Create bounding boxes for collision
+        // Check collisions
         const horizontalBB = new BoundingBox(nextX, this.y, this.width, this.height);
         const verticalBB = new BoundingBox(this.x, nextY, this.width, this.height);
 
-        // Check collisions and update position
-        const horizontalCollision = this.map.checkCollisions({
+        this.handleHorizontalCollision(horizontalBB, nextX);
+        this.handleVerticalCollision(verticalBB, nextY, mapHeight);
+
+        // Update bounding box
+        this.BB = new BoundingBox(this.x, this.y, this.width, this.height);
+    }
+
+    handleHorizontalCollision(horizontalBB, nextX) {
+        const collision = this.map.checkCollisions({
             BB: horizontalBB,
             x: nextX,
             y: this.y,
@@ -179,7 +221,20 @@ class Player {
             height: this.height
         });
 
-        const verticalCollision = this.map.checkCollisions({
+        if (collision.collides) {
+            if (this.velocity.x > 0) {
+                this.x = collision.tileX - this.width;
+            } else if (this.velocity.x < 0) {
+                this.x = collision.tileX + this.map.testSize;
+            }
+            this.velocity.x = 0;
+        } else {
+            this.x = nextX;
+        }
+    }
+
+    handleVerticalCollision(verticalBB, nextY, mapHeight) {
+        const collision = this.map.checkCollisions({
             BB: verticalBB,
             x: this.x,
             y: nextY,
@@ -187,60 +242,25 @@ class Player {
             height: this.height
         });
 
-        // Apply horizontal movement
-        if (horizontalCollision.collides) {
-            if (this.velocity.x > 0) {
-                this.x = horizontalCollision.tileX - this.width;
-            } else if (this.velocity.x < 0) {
-                this.x = horizontalCollision.tileX + this.map.testSize;
-            }
-            this.velocity.x = 0;
-        } else {
-            this.x = nextX;
-        }
-
-        // Apply vertical movement
-        if (verticalCollision.collides) {
+        if (collision.collides) {
             if (this.velocity.y > 0) {
-                this.y = verticalCollision.tileY - this.height;
-                this.velocity.y = 0;
+                this.y = collision.tileY - this.height;
                 this.isGrounded = true;
-                // Update state when landing
-                if (this.state === 4) {
-                    if (Math.abs(this.velocity.x) > MAX_WALK) {
-                        this.state = 2;
-                    } else if (Math.abs(this.velocity.x) > MIN_WALK) {
-                        this.state = 1;
-                    } else {
-                        this.state = 0;
-                    }
-                }
+                this.velocity.y = 0;
             } else if (this.velocity.y < 0) {
-                this.y = verticalCollision.tileY + this.map.testSize;
+                this.y = collision.tileY + this.map.testSize;
                 this.velocity.y = 0;
             }
         } else {
             this.y = nextY;
-            if (this.y + this.height < mapHeight) {
-                this.isGrounded = false;
-                if (this.velocity.y > 0) {
-                    this.state = 4; // Set to jumping/falling state when in air
-                }
-            }
+            this.isGrounded = this.y + this.height >= mapHeight;
         }
-
-        // Update facing direction
-        if (this.velocity.x < 0) this.facing = 0;
-        if (this.velocity.x > 0) this.facing = 1;
-
-        // Update bounding box
-        this.BB = new BoundingBox(this.x, this.y, this.width, this.height);
     }
 
     draw(ctx) {
         if (!ctx) return;
 
-        // Make sure we have a valid animation for the current state
+        // Draw the appropriate animation based on state and facing direction
         if (this.animations[this.state] && 
             this.animations[this.state][0] && 
             this.animations[this.state][0][this.facing]) {
@@ -252,17 +272,9 @@ class Player {
                 this.y,
                 0.5
             );
-        } else {
-            // Fallback to idle animation if current state animation is missing
-            this.animations[0][0][this.facing].drawFrame(
-                this.game.clockTick,
-                ctx,
-                this.x - 37,
-                this.y,
-                0.5
-            );
         }
 
+        // Draw debug bounding box if debugging is enabled
         if (this.game.options.debugging) {
             ctx.strokeStyle = 'red';
             ctx.strokeRect(this.x, this.y, this.width, this.height);
